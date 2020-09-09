@@ -1,0 +1,82 @@
+- hosts: localhost
+  connection: local
+
+  vars:
+
+  tasks:
+      
+    -   name: Check the version of OS
+        command: hostnamectl
+        register: os_check
+        ignore_errors: yes  
+
+    -   name: Absent the Irrelevant files - Ubuntu 20
+        file:
+          path: /etc/apt/sources.list.d/ansible-ubuntu-ansible-focal.list
+          state: absent
+        when:
+          - os_check.stdout | regex_search("Ubuntu 20")
+
+    -   name: Remove UFW - Ubuntu
+        apt: 
+            name: "{{ item }}" 
+            update_cache: yes 
+            state: absent
+        loop: 
+            - ufw
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Install CSF dependencies - Ubuntu
+        apt: 
+            name: "{{ item }}" 
+            update_cache: yes 
+            state: present
+        loop: 
+            - perl 
+            - zip 
+            - unzip 
+            - libwww-perl 
+            - liblwp-protocol-https-perl
+            - sendmail-bin
+        when:
+            - os_check.stdout | regex_search("Ubuntu")
+
+    -   name: Install CSF dependencies - CentOS
+        yum: 
+            name: "{{ item }}" 
+            state: present
+        loop: 
+            - perl 
+            - perl-libwww-perl 
+            - perl-LWP-Protocol-https 
+            - perl-GDGraph 
+            - wget 
+            - unzip 
+            - net-tools
+        when:
+            - os_check.stdout | regex_search("CentOS")
+
+    -   name: Get the CSF
+        get_url:
+            url: https://download.configserver.com/csf.tgz
+            dest: /usr/src
+
+    -   name: Extract CSF
+        unarchive:
+            src: /usr/src/csf.tgz
+            dest: /usr/src/
+
+    -   name: Initaite CSF
+        shell: "{{ item }}"
+        loop:
+            - sh /usr/src/csf/install.sh
+            - perl /usr/local/csf/bin/csftest.pl
+        args:
+            chdir: /usr/src/csf/
+
+    -   name: Start CSF
+        systemd:
+            name: csf
+            state: started
+            enabled: yes
